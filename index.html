@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { text-align: center; background: #222; color: #fff; font-family: sans-serif; }
+        canvas { border: 4px solid #555; background: #fff; cursor: crosshair; }
+    </style>
+</head>
+<body>
+    <h2>2D 공장: 이미지 적용하기</h2>
+    <div id="status">돈: 0원 | 모드: 벨트 (1:벨트, 2:생산기)</div>
+    <canvas id="gameCanvas" width="600" height="420"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        
+        // 이미지 객체 미리 생성
+        const imgBelt = new Image(); imgBelt.src = 'https://cdn-icons-png.flaticon.com/512/2921/2921226.png'; // 예시 아이콘
+        const imgMachine = new Image(); imgMachine.src = 'https://cdn-icons-png.flaticon.com/512/3069/3069415.png';
+        const imgItem = new Image(); imgItem.src = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+
+        const GRID = 30;
+        let money = 0;
+        let mode = 'belt';
+        let objects = []; 
+        let items = [];
+
+        // [이전과 동일한 이벤트 로직 생략]
+        // ... (생략된 부분은 위에서 만든 코드와 동일합니다) ...
+
+        function update() {
+            ctx.clearRect(0, 0, 600, 420);
+            
+            objects.forEach(o => {
+                if(o.type === 'belt') {
+                    ctx.drawImage(imgBelt, o.x, o.y, GRID, GRID);
+                } else {
+                    ctx.drawImage(imgMachine, o.x, o.y, GRID, GRID);
+                }
+            });
+
+            items.forEach((item, index) => {
+                ctx.drawImage(imgItem, item.x - 10, item.y - 10, 20, 20); // 아이템 이미지
+                // ... (이동 로직) ...
+            });
+            requestAnimationFrame(update);
+        }
+        // ...
+    </script>
+</body>
+</html>
