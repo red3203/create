@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>별빛 모험가 - 2D 횡스크롤 RPG</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#101827;color:#f3f6ff;font-family:system-ui,-apple-system,sans-serif}
+#wrap{max-width:1050px;margin:auto;padding:10px}header,.hud,.footer{display:flex;gap:9px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+header{margin:0 0 8px}.panel{background:#1d2b43;border:1px solid #425777;border-radius:10px;padding:8px 11px}
+.hud{justify-content:flex-start;font-size:13px}.meter{display:inline-block;width:105px;height:9px;background:#101827;border-radius:9px;overflow:hidden;vertical-align:middle;margin-left:4px}.meter i{display:block;height:100%;width:100%;background:#e45c70}.meter.xp i{background:#68d895}
+canvas{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#8bd0e5;border:3px solid #425777;border-radius:12px;image-rendering:pixelated;touch-action:none}
+.footer{margin-top:8px}.help{font-size:12px;color:#c5d2e8}button{background:#355d91;color:#fff;border:1px solid #7896bd;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer}button:hover{filter:brightness(1.15)}button:active{transform:translateY(1px)}
+#toast{position:fixed;top:15%;left:50%;transform:translateX(-50%);padding:10px 17px;background:#17243bf2;border:1px solid #7894bc;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:4}
+#screen{position:fixed;inset:0;background:#07101bdf;display:grid;place-items:center;padding:15px;z-index:5}#dialog{width:min(460px,100%);background:#1c2a43;border:1px solid #7894bc;border-radius:16px;padding:24px;text-align:center;box-shadow:0 20px 70px #0009}#dialog h1{margin:0 0 8px}#dialog p{color:#c7d5e9;line-height:1.55}input,select{background:#101a2b;color:white;border:1px solid #58739c;border-radius:8px;padding:10px;margin:5px;max-width:100%}
+#mobile{display:none;gap:6px}#mobile button{min-width:46px;min-height:44px;font-size:18px;touch-action:none}
+@media(max-width:680px){#wrap{padding:5px}.panel{padding:6px 8px}.hud{font-size:11px;gap:5px}.meter{width:65px}.help{display:none}#mobile{display:flex}.footer{gap:5px}.footer button{padding:7px 9px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header><div class="panel"><b>🌟 별빛 모험가</b> <span id="heroName">모험가</span></div>
+<div class="hud panel"><span>Lv.<b id="lv">1</b></span><span>HP <b id="hp">100/100</b><i class="meter"><i id="hpbar"></i></i></span><span>EXP <b id="xp">0/30</b><i class="meter xp"><i id="xpbar"></i></i></span><span>🪙 <b id="gold">0</b></span></div></header>
+<canvas id="game" width="960" height="540"></canvas>
+<div class="footer">
+<div class="panel help">이동 A/D 또는 ←/→ · 점프 W/↑/Space · 공격 J · 물약 H</div>
+<div id="mobile"><button id="ml">◀</button><button id="mr">▶</button><button id="mj">⬆</button><button id="ma">⚔</button></div>
+<div class="panel help">공격력 <b id="atk">12</b> · 물약 <b id="pots">3</b></div>
+<div><button id="potion">물약 H</button> <button id="save">저장</button></div>
+</div>
+</div>
+<div id="toast"></div>
+<div id="screen"><div id="dialog"><h1>🌟 별빛 모험가</h1><p>몬스터를 사냥하고 경험치를 모아 레벨을 올려 보세요!<br>혼자서 즐길 수 있는 2D 횡스크롤 RPG입니다.</p>
+<input id="nameInput" maxlength="10" value="모험가" placeholder="캐릭터 이름"><br>
+<select id="job"><option value="warrior">전사 - 균형 잡힌 능력</option><option value="mage">마법사 - 높은 공격력</option><option value="archer">궁수 - 민첩한 모험가</option></select><br>
+<button id="start" style="padding:12px 28px;margin-top:8px">모험 시작</button><p style="font-size:12px">진행 상황은 이 브라우저에 자동 저장됩니다.</p></div></div>
+<script>
+(()=>{
+const c=document.getElementById('game'),g=c.getContext('2d'),W=960,H=540,world=2800,$=id=>document.getElementById(id);
+let p={x:80,y:390,vx:0,vy:0,w:30,h:46,face:1,hp:100,maxHp:100,level:1,xp:0,gold:0,atk:12,potions:3,name:'모험가',job:'warrior',inv:0,onGround:false};
+const floors=[{x:0,y:490,w:690},{x:760,y:490,w:540},{x:1370,y:490,w:500},{x:1940,y:490,w:860},
+{x:220,y:395,w:150},{x:470,y:325,w:150},{x:850,y:390,w:155},{x:1100,y:330,w:150},{x:1460,y:385,w:160},{x:1730,y:315,w:160},{x:2080,y:390,w:170},{x:2390,y:325,w:160}];
+let mobs=[],keys={},cam=0,active=false,last=0,toastTimer;
+function spawn(){mobs=[];for(let i=0;i<20;i++){let x=260+i*128;mobs.push({x,base:x,y:458,w:34,h:30,hp:28,max:28,dir:i%2?1:-1,alive:true,hit:0});}}
+function toast(s){$('toast').textContent=s;$('toast').style.opacity=1;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.opacity=0,1400)}
+function ui(){$('heroName').textContent=p.name;$('lv').textContent=p.level;$('hp').textContent=Math.ceil(p.hp)+'/'+p.maxHp;$('hpbar').style.width=p.hp/p.maxHp*100+'%';$('xp').textContent=p.xp+'/'+(p.level*30);$('xpbar').style.width=p.xp/(p.level*30)*100+'%';$('gold').textContent=p.gold;$('atk').textContent=p.atk;$('pots').textContent=p.potions}
+function save(silent=false){localStorage.setItem('starlightRpg',JSON.stringify({p,mobs}));if(!silent)toast('모험 기록을 저장했어요!')}
+function load(){try{let d=JSON.parse(localStorage.getItem('starlightRpg'));if(d?.p){p={...p,...d.p};if(Array.isArray(d.mobs))mobs=d.mobs;return true}}catch(e){}return false}
+function gainXP(n){p.xp+=n;while(p.xp>=p.level*30){p.xp-=p.level*30;p.level++;p.maxHp+=15;p.hp=p.maxHp;p.atk+=3;toast('레벨 업! Lv.'+p.level+' 달성!')}ui()}
+function hit(){if(!active)return;let found=false;mobs.forEach(m=>{if(!m.alive)return;let dx=m.x+17-(p.x+15);if(Math.abs(dx)<83&&Math.abs(m.y-p.y)<72&&Math.sign(dx||1)===p.face){m.hp-=p.atk;m.hit=9;found=true;if(m.hp<=0){m.alive=false;gainXP(12);let coin=5+Math.floor(Math.random()*6);p.gold+=coin;if(Math.random()<.13)p.potions++;toast('슬라임 처치! EXP +12, 골드 +'+coin);ui()}}});if(!found)toast('앞쪽 가까이에 몬스터가 없어요.')}
+function potion(){if(!p.potions)return toast('물약이 없어요!');if(p.hp===p.maxHp)return toast('체력이 가득 찼어요.');p.potions--;p.hp=Math.min(p.maxHp,p.hp+45);ui();toast('HP를 회복했어요!')}
+function jump(){if(p.onGround){p.vy=-11.5;p.onGround=false}}
+function bind(id,k){let b=$(id);b.addEventListener('pointerdown',e=>{e.preventDefault();keys[k]=true});['pointerup','pointerleave','pointercancel'].forEach(v=>b.addEventListener(v,()=>keys[k]=false))}
+bind('ml','ArrowLeft');bind('mr','ArrowRight');$('mj').onpointerdown=e=>{e.preventDefault();jump()};$('ma').onpointerdown=e=>{e.preventDefault();hit()};
+window.addEventListener('keydown',e=>{let k=e.key.toLowerCase();if(['arrowleft','arrowright','arrowup',' '].includes(k))e.preventDefault();if(!keys[k]&&['arrowup','w',' '].includes(k))jump();if(!keys[k]&&k==='j')hit();if(!keys[k]&&k==='h')potion();keys[k]=true});
+window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+$('potion').onclick=potion;$('save').onclick=()=>save();
+$('start').onclick=()=>{let fresh=!load();if(fresh){p.name=$('nameInput').value.trim()||'모험가';p.job=$('job').value;p.atk=p.job==='mage'?17:p.job==='archer'?13:12;spawn()}else toast('저장된 모험을 이어서 시작합니다!');$('screen').style.display='none';active=true;ui();requestAnimationFrame(loop)};
+function box(x,y,w,h,color){g.fillStyle=color;g.fillRect(Math.round(x),Math.round(y),w,h)}
+function background(){let gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#77c9e8');gr.addColorStop(1,'#d7efcf');g.fillStyle=gr;g.fillRect(0,0,W,H);
+for(let i=0;i<10;i++){let x=(i*175-cam*.2)%(W+220)-100;g.fillStyle=i%2?'#83bd99':'#6da88d';g.beginPath();g.arc(x,405,125,Math.PI,0);g.fill()}
+for(let i=0;i<7;i++){let x=(i*190-cam*.12)%(W+100)-40,y=90+i%3*32;g.fillStyle='#ffffffaa';g.beginPath();g.arc(x,y,22,0,7);g.arc(x+25,y-5,29,0,7);g.arc(x+52,y+2,20,0,7);g.fill()}}
+function drawPlayer(){let x=p.x-cam,y=p.y;g.fillStyle='#31505b55';g.beginPath();g.ellipse(x+15,y+47,18,5,0,0,7);g.fill();
+box(x+5,y+34,9,12,'#463b68');box(x+18,y+34,9,12,'#463b68');box(x+5,y+18,21,19,p.job==='mage'?'#754bb0':p.job==='archer'?'#39865c':'#3476b9');box(x+7,y+2,18,18,'#ffd5a6');box(x+5,y,22,8,'#593b32');box(x+4,y+5,5,9,'#593b32');box(x+(p.face>0?19:9),y+9,3,3,'#202b3b');
+if(p.job==='mage'){box(x+p.face*14+14,y+10,5,30,'#7952bb');box(x+p.face*14+12,y+5,9,9,'#8ce6ff')}else{g.save();g.translate(x+15,y+26);g.rotate(p.face*.55);box(5,-17,4,31,'#e6edf7');box(3,8,8,4,'#9b7149');g.restore()}}
+function drawMob(m){let x=m.x-cam,y=m.y;if(x<-50||x>W+50)return;g.fillStyle='#244c4d44';g.beginPath();g.ellipse(x+17,y+29,19,5,0,0,7);g.fill();let col=m.hit?'#d9ffff':'#62d987';box(x+3,y+10,28,18,col);box(x+8,y+4,18,9,col);box(x+9,y+14,4,5,'#173c45');box(x+22,y+14,4,5,'#173c45');box(x+13,y+23,9,2,'#277b63');if(m.hp<m.max){box(x,y-8,34,4,'#31404a');box(x,y-8,34*m.hp/m.max,4,'#e65b68')}}
+function draw(){background();floors.forEach(f=>{let x=f.x-cam;if(x+f.w<0||x>W)return;box(x,f.y,f.w,f.y===490?f.w?70:70:18,'#8a6848');box(x,f.y,f.w,8,'#58a65c');for(let j=0;j<f.w;j+=24)box(x+j,f.y+13,12,3,'#a77c52')});
+for(let i=0;i<14;i++){let x=i*205-cam;if(x>-40&&x<W+40){box(x+20,440,12,50,'#795338');box(x,410,52,36,'#438c57');box(x+8,395,36,27,'#56a96a')}}
+mobs.forEach(m=>{if(m.alive)drawMob(m)});if(p.inv%8<4)drawPlayer();g.fillStyle='#20364a';g.font='bold 15px sans-serif';g.fillText('초보자 사냥터',20,28);g.font='12px sans-serif';g.fillText('슬라임을 사냥해 성장하세요!',20,48)}
+function update(){let speed=3.2;if(keys.arrowleft||keys.a){p.vx=-speed;p.face=-1}else if(keys.arrowright||keys.d){p.vx=speed;p.face=1}else p.vx*=.72;p.x=Math.max(0,Math.min(world-p.w,p.x+p.vx));p.vy+=.55;p.y+=p.vy;p.onGround=false;
+floors.forEach(f=>{if(p.x+p.w>f.x&&p.x<f.x+f.w&&p.y+p.h>=f.y&&p.y+p.h<=f.y+19&&p.vy>=0){p.y=f.y-p.h;p.vy=0;p.onGround=true}});
+if(p.y>H+100){p.hp=Math.max(1,p.hp-15);p.x=Math.max(20,p.x-100);p.y=380;p.vy=0;toast('떨어졌어요! HP가 감소했습니다.');ui()}
+mobs.forEach(m=>{if(!m.alive)return;m.x+=m.dir*.48;if(Math.abs(m.x-m.base)>42)m.dir*=-1;if(m.hit>0)m.hit--;if(Math.abs(p.x+15-(m.x+17))<29&&Math.abs(p.y-m.y)<38&&p.inv<=0){p.hp-=8;p.inv=55;p.vy=-4;toast('슬라임에게 공격받았어요!');if(p.hp<=0){p.hp=p.maxHp;p.x=80;p.y=390;p.vy=0;p.gold=Math.max(0,p.gold-10);toast('쓰러졌어요. 시작 지점에서 부활합니다.')}ui()}});
+if(p.inv>0)p.inv--;cam=Math.max(0,Math.min(world-W,p.x-W*.42));}
+function loop(t){if(!active)return;let dt=Math.min(32,t-last||16);last=t;update();draw();if(Math.random()<.003)save(true);requestAnimationFrame(loop)}
+if(!load())spawn();ui();draw();
+})();
+</script>
+</body>
+</html>
